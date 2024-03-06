@@ -1,0 +1,40 @@
+import concurrent.futures
+import requests
+import logging
+from typing import List
+
+# Функция для опроса одного датчика и получения данных о температуре
+def get_temperature(url):
+    try:
+        response = requests.get(url, timeout=5)  # Отправляем GET-запрос и устанавливаем тайм-аут в 5 секунд
+        response.raise_for_status()  # Проверяем статус ответа
+        data = response.json()  # Предполагаем, что данные в формате JSON
+        temperature = data['temperature']  # Извлекаем значение температуры из данных
+        return temperature
+    except (requests.RequestException, ValueError) as e:
+        logging.error(f"Не удалось получить температуру от {url}: {str(e)}")
+        return None
+
+# Функция для опроса датчиков и получения данных о температуре
+def get_temperatures(urls: List[str]):
+    # Настраиваем логирование
+    logging.basicConfig(filename='temperature.log', level=logging.ERROR)
+
+    temperatures = []
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # Запускаем опросы датчиков в отдельных потоках
+        futures = [executor.submit(get_temperature, url) for url in urls]
+
+        try:
+            # Ожидаем завершения всех опросов
+            concurrent.futures.wait(futures, timeout=10)
+            for future in futures:
+                # Получаем результаты опросов (результат или исключение)
+                temperature = future.result()
+                if temperature is not None:
+                    temperatures.append(temperature)
+        except concurrent.futures.TimeoutError:
+            logging.error("Во время ожидания откликов датчиков произошел тайм-аут")
+
+    return temperatures
